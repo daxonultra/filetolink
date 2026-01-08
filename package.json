@@ -1,0 +1,17 @@
+{
+  "name": "telegram-filestream-bot",
+  "version": "1.0.0",
+  "description": "Telegram File Stream Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "telegraf": "^4.15.0",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
