@@ -18,8 +18,8 @@ const API_ID = parseInt(process.env.API_ID);
 const API_HASH = process.env.API_HASH;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const BIN_CHANNEL = process.env.BIN_CHANNEL;
-const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-const PORT = process.env.PORT || 3000;
+const BASE_URL = process.env.SERVER_URL;
+const PORT = 3000;
 
 // Session file path
 const SESSION_FILE = "session.txt";
