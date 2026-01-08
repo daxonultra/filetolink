@@ -1,15 +1,17 @@
 {
   "name": "telegram-filestream-bot",
   "version": "1.0.0",
-  "description": "Telegram File Stream Bot",
+  "type": "module",
+  "description": "Telegram File Stream Bot with Session Management",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
+    "telegram": "^2.22.2",
     "express": "^4.18.2",
-    "telegraf": "^4.15.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "input": "^1.0.1"
   },
   "engines": {
     "node": ">=18.x"
