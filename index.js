@@ -14,30 +14,30 @@ const BIN_CHANNEL = process.env.BIN_CHANNEL;
 const BASE_URL = process.env.SERVER_URL;
 const PORT = 3000;
 
-// Load/Save session
-function loadSession() {
-  if (fs.existsSync("session.txt")) {
-    return new StringSession(fs.readFileSync("session.txt", "utf-8").trim());
-  }
-  return new StringSession("");
+// Auto session management
+const SESSION_FILE = "session.txt";
+let sessionString = "";
+
+if (fs.existsSync(SESSION_FILE)) {
+  sessionString = fs.readFileSync(SESSION_FILE, "utf-8").trim();
+  console.log("✅ Using existing session");
+} else {
+  console.log("📝 Will create new session");
 }
 
-function saveSession(client) {
-  fs.writeFileSync("session.txt", client.session.save());
-}
+const client = new TelegramClient(
+  new StringSession(sessionString),
+  API_ID,
+  API_HASH,
+  { connectionRetries: 5 }
+);
 
 // File storage
 const fileStore = new Map();
 
-// Telegram client
-const client = new TelegramClient(loadSession(), API_ID, API_HASH, {
-  connectionRetries: 5,
-});
-
 // Express app
 const app = express();
 
-// Simple root route
 app.get("/", (req, res) => {
   res.send("Bot is running!");
 });
@@ -51,60 +51,98 @@ app.get("/file/:id", async (req, res) => {
     const data = fileStore.get(req.params.id);
     if (!data) return res.status(404).send("Not found");
 
-    const messages = await client.getMessages(BIN_CHANNEL, { ids: [data.messageId] });
+    const messages = await client.getMessages(BIN_CHANNEL, {
+      ids: [data.messageId],
+    });
+
+    if (!messages || !messages[0]) {
+      return res.status(404).send("File not found in channel");
+    }
+
     const buffer = await client.downloadMedia(messages[0], {});
 
     res.setHeader("Content-Type", data.mimeType);
-    res.setHeader("Content-Disposition", `attachment; filename="${data.fileName}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${data.fileName}"`
+    );
     res.send(buffer);
   } catch (e) {
+    console.error("File error:", e.message);
     res.status(500).send("Error");
   }
 });
 
 // Main
 async function main() {
-  // Start web server
+  console.log("🚀 Starting bot...");
+
+  // Start web server first
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`✅ Server on port ${PORT}`);
   });
 
-  // Start bot
+  // Start telegram bot
   await client.start({ botAuthToken: BOT_TOKEN });
-  saveSession(client);
-  console.log("Bot started");
+  console.log("✅ Bot connected");
 
-  // Handle files
+  // Save session automatically
+  const newSession = client.session.save();
+  if (newSession !== sessionString) {
+    fs.writeFileSync(SESSION_FILE, newSession);
+    console.log("💾 Session saved");
+  }
+
+  // Handle documents
   client.addEventHandler(async (event) => {
-    if (!event.message?.document) return;
-
     const msg = event.message;
+    if (!msg?.document) return;
+
     const file = msg.document;
-    const fileName = file.attributes?.find((a) => a.fileName)?.fileName || "file";
+    const fileName =
+      file.attributes?.find((a) => a.fileName)?.fileName || "file";
 
-    // Forward to channel
-    const fwd = await client.forwardMessages(BIN_CHANNEL, {
-      messages: [msg.id],
-      fromPeer: msg.chatId,
-    });
+    try {
+      console.log(`📥 Processing: ${fileName}`);
 
-    // Store file info
-    const hash = file.id.toString().slice(-6);
-    const key = hash + file.id;
-    
-    fileStore.set(key, {
-      messageId: fwd[0].id,
-      fileName: fileName,
-      mimeType: file.mimeType,
-    });
+      // Forward to bin channel
+      const fwd = await client.forwardMessages(BIN_CHANNEL, {
+        messages: [msg.id],
+        fromPeer: msg.chatId,
+      });
 
-    // Send link
-    const link = `${BASE_URL}/file/${key}`;
-    await client.sendMessage(msg.chatId, {
-      message: `File: ${fileName}\nLink: ${link}`,
-      replyTo: msg.id,
-    });
+      // Generate hash and store
+      const hash = file.id.toString().slice(-6);
+      const key = hash + file.id;
+
+      fileStore.set(key, {
+        messageId: fwd[0].id,
+        fileName: fileName,
+        mimeType: file.mimeType || "application/octet-stream",
+      });
+
+      // Send link
+      const link = `${BASE_URL}/file/${key}`;
+
+      await client.sendMessage(msg.chatId, {
+        message: `✅ File: ${fileName}\n🔗 Link: ${link}`,
+        replyTo: msg.id,
+      });
+
+      console.log(`✅ Stored: ${fileName}`);
+    } catch (e) {
+      console.error("Error:", e.message);
+      await client.sendMessage(msg.chatId, {
+        message: "❌ Error processing file",
+        replyTo: msg.id,
+      });
+    }
   }, new NewMessage({}));
+
+  console.log("📡 Ready!");
 }
 
-main().catch(console.error);
+main().catch((e) => {
+  console.error("Fatal:", e);
+  process.exit(1);
+});
